@@ -1,0 +1,53 @@
+{
+  "name": "doge-draw",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "prisma db push && prisma generate && concurrently \"npm run dev:next\" \"npm run dev:ws\"",
+    "dev:next": "next dev --turbopack -p 6832 -H 0.0.0.0",
+    "dev:ws": "node server/websocket.js",
+    "build": "prisma migrate deploy && prisma generate && next build",
+    "start": "next start -p 6832",
+    "start:ws": "node server/websocket.js",
+    "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "init-db": "npx ts-node --project scripts/tsconfig.json scripts/init-db.ts",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "next": "15.4.2",
+    "@prisma/client": "^5.8.0",
+    "prisma": "^5.8.0",
+    "socket.io": "^4.7.4",
+    "socket.io-client": "^4.7.4",
+    "next-auth": "^4.24.5",
+    "konva": "^9.2.0",
+    "react-konva": "^18.2.10",
+    "bcryptjs": "^2.4.3",
+    "jose": "^5.2.0",
+    "zod": "^3.22.4",
+    "lucide-react": "^0.303.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.2.0",
+    "concurrently": "^8.2.2",
+    "ts-node": "^10.9.2"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/bcryptjs": "^2.4.6",
+    "@tailwindcss/postcss": "^4",
+    "tailwindcss": "^4",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.2",
+    "@eslint/eslintrc": "^3"
+  }
+}
