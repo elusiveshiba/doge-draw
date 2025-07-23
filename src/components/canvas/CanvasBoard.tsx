@@ -104,8 +104,11 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
 
   // Handler to receive area selection from TrustedUserControls
   const handleAreaPixelClick = (from: {x: number, y: number}, to: {x: number, y: number}) => {
-    // Optionally, you can do something here if you want to show a preview or highlight
-    // For now, TrustedUserControls manages the resetArea state
+    // Set the two selected pixels for highlight
+    setAreaSelectionPixels([from, to])
+    setAreaSelectionFirstPixel(from)
+    setAreaSelectionHoverPixel(null)
+    // Do not clear highlight here; let it persist until cancel or after successful action
   }
 
   // Intercept canvas clicks for area selection
@@ -330,14 +333,12 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
 
   }, [pixels, previewPixels, hoveredPixel, readonly, board.width, board.height, isCanvasReady, currentPixelSize, areaSelectionActive, areaSelectionPixels, areaSelectionFirstPixel, areaSelectionHoverPixel])
 
-  // When area selection is cancelled, clear highlights
-  useEffect(() => {
-    if (!areaSelectionActive) {
-      setAreaSelectionPixels([])
-      setAreaSelectionFirstPixel(null)
-      setAreaSelectionHoverPixel(null)
-    }
-  }, [areaSelectionActive])
+  // Only clear area selection highlights when a new selection is started or after a successful reset/report
+  const clearAreaSelection = () => {
+    setAreaSelectionPixels([])
+    setAreaSelectionFirstPixel(null)
+    setAreaSelectionHoverPixel(null)
+  }
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -900,6 +901,7 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
           areaSelectionActive={areaSelectionActive}
           onRequestAreaSelection={setAreaSelectionActive}
           onAreaPixelClick={handleAreaPixelClick}
+          clearAreaSelection={clearAreaSelection}
         />
       )}
 

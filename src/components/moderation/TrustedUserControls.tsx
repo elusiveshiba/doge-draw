@@ -12,6 +12,7 @@ interface TrustedUserControlsProps {
   areaSelectionActive: boolean
   onRequestAreaSelection: (active: boolean) => void
   onAreaPixelClick: (from: {x: number, y: number}, to: {x: number, y: number}) => void
+  clearAreaSelection: () => void
 }
 
 declare global {
@@ -20,7 +21,7 @@ declare global {
   }
 }
 
-export function TrustedUserControls({ boardId, boardWidth, boardHeight, onCanvasReset, areaSelectionActive, onRequestAreaSelection, onAreaPixelClick }: TrustedUserControlsProps) {
+export function TrustedUserControls({ boardId, boardWidth, boardHeight, onCanvasReset, areaSelectionActive, onRequestAreaSelection, onAreaPixelClick, clearAreaSelection }: TrustedUserControlsProps) {
   const { user } = useAuth()
   const [isResetting, setIsResetting] = useState(false)
   const [isReporting, setIsReporting] = useState(false)
@@ -64,7 +65,7 @@ export function TrustedUserControls({ boardId, boardWidth, boardHeight, onCanvas
       }
       onAreaPixelClick(areaClicks[0], areaClicks[1])
       setAreaClicks([])
-      onRequestAreaSelection(false) // Automatically cancel area selection after 2nd pixel
+      onRequestAreaSelection(false) // Exit area selection mode after 2nd pixel, but do NOT clear highlight
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areaClicks, areaSelectionActive, mode])
@@ -138,7 +139,8 @@ export function TrustedUserControls({ boardId, boardWidth, boardHeight, onCanvas
         setResetArea({ fromX: 0, fromY: 0, toX: 99, toY: 99 })
         setMode(null)
         onCanvasReset?.()
-        onRequestAreaSelection(false) // Only clear highlight after successful reset
+        onRequestAreaSelection(false)
+        clearAreaSelection() // Clear highlight after successful reset
       } else {
         setError(data.error || 'Failed to reset canvas area')
       }
@@ -178,6 +180,7 @@ export function TrustedUserControls({ boardId, boardWidth, boardHeight, onCanvas
         setReportArea(null)
         setMode(null)
         onRequestAreaSelection(false)
+        clearAreaSelection() // Clear highlight after successful report
       } else {
         setError(data.errors?.join(', ') || data.error || 'Failed to report area')
       }
@@ -345,6 +348,7 @@ export function TrustedUserControls({ boardId, boardWidth, boardHeight, onCanvas
                 setMode(null)
                 onRequestAreaSelection(false)
                 setAreaClicks([])
+                clearAreaSelection() // Clear highlight on cancel
               }}
               className="flex-1"
             >
@@ -478,6 +482,7 @@ export function TrustedUserControls({ boardId, boardWidth, boardHeight, onCanvas
                 setMode(null)
                 onRequestAreaSelection(false)
                 setAreaClicks([])
+                clearAreaSelection() // Clear highlight on cancel
                 setReportArea(null)
               }}
               className="flex-1"
