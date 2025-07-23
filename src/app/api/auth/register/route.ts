@@ -41,12 +41,21 @@ export async function POST(request: NextRequest) {
     const adminAddresses = process.env.ADMIN_WALLET_ADDRESSES?.split(',').map(addr => addr.trim()) || []
     const isAdmin = adminAddresses.includes(walletAddress)
 
-    // Create user
+    // Fetch starting credits from Settings table
+    let startingCredits = 1000;
+    try {
+      const settings = await prisma.settings.findUnique({ where: { key: 'startingCredits' } });
+      if (settings && !isNaN(Number(settings.value))) {
+        startingCredits = Number(settings.value);
+      }
+    } catch (e) {
+      // fallback to 1000
+    }
     const user = await prisma.user.create({
       data: {
         walletAddress,
         passwordHash: hashedPassword,
-        credits: 0,
+        credits: startingCredits,
         isAdmin
       }
     })

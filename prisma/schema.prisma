@@ -156,6 +156,15 @@ model ModerationAction {
   @@map("moderation_actions")
 }
 
+model Settings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
 enum TransactionType {
   CREDIT_PURCHASE
   PIXEL_PAINT

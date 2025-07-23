@@ -36,6 +36,15 @@ async function main() {
     }
   }
 
+  // Set default starting credits in Settings if not present
+  const existingStartingCredits = await prisma.settings.findUnique({ where: { key: 'startingCredits' } });
+  if (!existingStartingCredits) {
+    await prisma.settings.create({
+      data: { key: 'startingCredits', value: '1000' }
+    });
+    console.log('✅ Set default starting credits in Settings table');
+  }
+
   // Create sample boards
   const sampleBoards = [
     {
