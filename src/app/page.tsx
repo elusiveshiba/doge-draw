@@ -49,7 +49,7 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50">
       {/* Hero Section */}
       <section 
-        className="relative py-20 px-4 text-center bg-cover bg-center bg-no-repeat min-h-[500px] flex items-center"
+        className="relative py-20 px-4 text-center bg-cover bg-center bg-no-repeat min-h-[900px] flex items-center"
         style={{
           backgroundImage: "url('/banner.jpg')",
         }}

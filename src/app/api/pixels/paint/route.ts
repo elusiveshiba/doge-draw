@@ -174,13 +174,13 @@ export async function POST(request: NextRequest) {
       const wsUrl = process.env.WEBSOCKET_URL || 'http://localhost:3001'
       const wsClient = io(wsUrl, { transports: ['websocket', 'polling'] })
       wsClient.on('connect', () => {
-        wsClient.emit('pixel-painted', {
-          boardId,
-          x,
-          y,
-          color,
-          newPrice,
-          userId
+      wsClient.emit('pixel-painted', {
+        boardId,
+        x,
+        y,
+        color,
+        newPrice,
+        userId
         }, () => {
           wsClient.disconnect()
         })
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
       })
       setTimeout(() => {
         if (wsClient.connected) {
-          wsClient.disconnect()
+      wsClient.disconnect()
         }
       }, 2000)
     } catch (wsError) {
