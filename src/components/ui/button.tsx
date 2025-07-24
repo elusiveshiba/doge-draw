@@ -8,16 +8,16 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow hover:bg-primary/90",
+          "bg-[#f5f5f5] text-[#171717] shadow hover:bg-[#e5e5e5]", // hardcoded light bg/text
         destructive:
-          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
+          "bg-red-600 text-white shadow-sm hover:bg-red-700", // hardcoded
         outline:
-          "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
+          "border border-gray-300 bg-[#f5f5f5] text-[#171717] shadow-sm hover:bg-[#e5e5e5]", // hardcoded
         secondary:
-          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
-        doge: "bg-gradient-to-r from-yellow-400 to-yellow-600 text-yellow-900 font-bold shadow-lg hover:from-yellow-500 hover:to-yellow-700",
+          "bg-[#ededed] text-[#171717] shadow-sm hover:bg-[#e5e5e5]", // hardcoded
+        ghost: "bg-transparent text-[#171717] hover:bg-[#f5f5f5]", // hardcoded
+        link: "text-blue-700 underline-offset-4 hover:underline bg-transparent", // hardcoded
+        doge: "bg-gradient-to-r from-yellow-400 to-yellow-600 text-yellow-900 font-bold shadow-lg hover:from-yellow-500 hover:to-yellow-700", // already hardcoded
       },
       size: {
         default: "h-9 px-4 py-2",

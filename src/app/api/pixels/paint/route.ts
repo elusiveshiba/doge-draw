@@ -172,20 +172,28 @@ export async function POST(request: NextRequest) {
     // Broadcast pixel update via WebSocket
     try {
       const wsUrl = process.env.WEBSOCKET_URL || 'http://localhost:3001'
-      const wsClient = io(wsUrl)
-      
-      wsClient.emit('pixel-painted', {
-        boardId,
-        x,
-        y,
-        color,
-        newPrice,
-        userId
+      const wsClient = io(wsUrl, { transports: ['websocket', 'polling'] })
+      wsClient.on('connect', () => {
+        wsClient.emit('pixel-painted', {
+          boardId,
+          x,
+          y,
+          color,
+          newPrice,
+          userId
+        }, () => {
+          wsClient.disconnect()
+        })
       })
-      
-      wsClient.disconnect()
+      wsClient.on('connect_error', () => {
+        wsClient.disconnect()
+      })
+      setTimeout(() => {
+        if (wsClient.connected) {
+          wsClient.disconnect()
+        }
+      }, 2000)
     } catch (wsError) {
-      console.error('WebSocket broadcast error:', wsError)
       // Don't fail the request if WebSocket fails
     }
 

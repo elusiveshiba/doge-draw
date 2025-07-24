@@ -4,9 +4,17 @@ const { PrismaClient } = require('@prisma/client')
 
 const prisma = new PrismaClient()
 const httpServer = createServer()
+const allowedOrigins = [
+  "http://localhost:6832"
+]
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL)
+}
+
+// For development, allow all origins to fix CORS issues on LAN and localhost
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:6832",
+    origin: '*', // WARNING: Use only for development! Restrict in production.
     methods: ["GET", "POST"]
   }
 })
@@ -14,8 +22,13 @@ const io = new Server(httpServer, {
 // Store active board connections
 const boardConnections = new Map()
 
+// Log every event received by the server
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id)
+
+  socket.onAny((event, ...args) => {
+    console.log(`[WebSocket Server] Event received from client:`, event, ...args)
+  })
 
   // Join a specific board room
   socket.on('join-board', async (boardId) => {
@@ -80,7 +93,18 @@ io.on('connection', (socket) => {
       const { boardId, x, y, color, newPrice, userId } = data
       
       // Broadcast to all clients in the board room
-      socket.to(`board-${boardId}`).emit('pixel-update', {
+      console.log(`[WebSocket Server] Emitting pixel-update to room board-${boardId}:`, {
+        type: 'PIXEL_UPDATE',
+        payload: {
+          boardId,
+          x,
+          y,
+          color,
+          newPrice,
+          userId
+        }
+      })
+      io.to(`board-${boardId}`).emit('pixel-update', {
         type: 'PIXEL_UPDATE',
         payload: {
           boardId,

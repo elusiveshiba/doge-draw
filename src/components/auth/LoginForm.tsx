@@ -28,11 +28,12 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
       return
     }
 
-    if (!isValidDogeAddress(walletAddress)) {
-      setError('Please enter a valid Dogecoin wallet address')
-      setIsLoading(false)
-      return
-    }
+    // Remove Dogecoin address validation
+    // if (!isValidDogeAddress(walletAddress)) {
+    //   setError('Please enter a valid Dogecoin wallet address')
+    //   setIsLoading(false)
+    //   return
+    // }
 
     try {
       const success = await login(walletAddress, password)
@@ -59,7 +60,7 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="walletAddress" className="block text-sm font-medium text-gray-700 mb-1">
-              Dogecoin Wallet Address
+              Dogecoin address or username
             </label>
             <input
               id="walletAddress"
@@ -67,7 +68,7 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
               value={walletAddress}
               onChange={(e) => setWalletAddress(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-              placeholder="Enter your Dogecoin wallet address"
+              placeholder="Enter your Dogecoin address or username"
               disabled={isLoading}
             />
           </div>

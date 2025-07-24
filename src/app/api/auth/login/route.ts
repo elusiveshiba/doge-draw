@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 
 const loginSchema = z.object({
-  walletAddress: z.string().min(1, 'Wallet address is required'),
+  walletAddress: z.string().min(1, 'Dogecoin address or username is required'),
   password: z.string().min(1, 'Password is required')
 })
 
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { walletAddress, password } = loginSchema.parse(body)
 
-    // Find user by wallet address
+    // Find user by wallet address (no validation, can be any string)
     const user = await prisma.user.findUnique({
       where: { walletAddress }
     })

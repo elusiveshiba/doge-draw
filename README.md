@@ -19,22 +19,29 @@ Collaborative pixel art platform powered by Dogecoin.
 - JWT authentication
 
 ## Setup
-1. **Clone & Install**
+1. **Install Docker Compose**
+   - If you don't have Docker Compose, follow the official guide: https://docs.docker.com/compose/install/
+   - On most systems with Docker Desktop, Docker Compose is included by default.
+2. **Clone & Install**
    ```bash
    git clone <repo>
    cd doge-draw
    npm install --legacy-peer-deps
    ```
-2. **Database**
+3. **Database**
    - Use Docker: `docker-compose up -d`
    - Or local: `createdb dogedraw`
-3. **Environment**
+4. **Environment**
    - Copy `.env.example` to `.env` and update values
-4. **Initialize DB**
+5. **Run Migrations**
+   ```bash
+   npx prisma migrate dev
+   ```
+6. **Initialize DB**
    ```bash
    npm run init-db
    ```
-5. **Start Dev**
+7. **Start Dev**
    ```bash
    npm run dev
    ```

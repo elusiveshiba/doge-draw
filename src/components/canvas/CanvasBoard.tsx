@@ -193,7 +193,7 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
       }
     })
     setPixels(pixelMap)
-  }, [board.pixels])
+  }, [board.id])
 
   // Initialize Canvas
   useEffect(() => {
@@ -344,8 +344,15 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:3001'
+    // Use location.host for the WebSocket URL if not set in env
+    let wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL
+    if (!wsUrl) {
+      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+      wsUrl = `${protocol}://${window.location.host}`
+    }
     const newSocket = io(wsUrl)
+
+    console.log('Client board.id:', board.id, 'type:', typeof board.id)
 
     newSocket.on('connect', () => {
       console.log('Connected to WebSocket')
@@ -359,20 +366,30 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
     })
 
     newSocket.on('pixel-update', (data: WebSocketMessage) => {
+      console.log('Received pixel update:', data)
       if (data.type === 'PIXEL_UPDATE') {
-        const { x, y, color, newPrice } = data.payload
+        const { boardId, x, y, color, newPrice } = data.payload;
+        console.log('Comparing event boardId:', boardId, 'type:', typeof boardId, 'with client board.id:', board.id, 'type:', typeof board.id)
+        if (String(boardId) !== String(board.id)) return; // Ignore updates for other boards
+        console.log('Received pixel update for this board:', { x, y, color, newPrice });
         setPixels(prev => {
-          const newPixels = new Map(prev)
-          const pixelKey = getPixelKey(x, y)
+          const newPixels = new Map(prev);
+          const pixelKey = getPixelKey(x, y);
           newPixels.set(pixelKey, {
             x, y, color,
             price: newPrice,
             timesChanged: (prev.get(pixelKey)?.timesChanged || 0) + 1
-          })
-          return newPixels
-        })
+          });
+          console.log('Updated pixels state for', pixelKey);
+          return newPixels;
+        });
       }
-    })
+    });
+
+    // Log every event received from the WebSocket
+    newSocket.onAny((event, ...args) => {
+      console.log('[WebSocket] Event received:', event, ...args);
+    });
 
     setSocket(newSocket)
 
@@ -438,7 +455,20 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
     return null
   }
 
-  // Track hovered pixel for area selection preview
+  // Track drawing state for hold-and-draw
+  const isDrawing = useRef(false)
+
+  const handleCanvasMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (readonly || !user) return
+    isDrawing.current = true
+    const coords = getCanvasCoordinates(event)
+    if (coords) addToPreview(coords.x, coords.y)
+  }
+
+  const handleCanvasMouseUp = () => {
+    isDrawing.current = false
+  }
+
   const handleCanvasMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (readonly) return
     const coords = getCanvasCoordinates(event)
@@ -446,10 +476,16 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
     if (areaSelectionActive && areaSelectionFirstPixel && areaSelectionPixels.length === 1) {
       setAreaSelectionHoverPixel(coords)
     }
+    // Hold-and-draw logic
+    if (isDrawing.current && coords && !areaSelectionActive) {
+      addToPreview(coords.x, coords.y)
+    }
   }
 
+  // End drawing if mouse leaves canvas
   const handleCanvasMouseLeave = () => {
     setHoveredPixel(null)
+    isDrawing.current = false
     if (areaSelectionActive) {
       setAreaSelectionHoverPixel(null)
     }
@@ -742,6 +778,47 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
         </div>
       )}
 
+      {/* Preview Controls or Placeholder */}
+      {!readonly ? (
+        previewPixels.size > 0 ? (
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-yellow-800">
+                Preview ({previewPixels.size} pixel{previewPixels.size !== 1 ? 's' : ''})
+              </h3>
+              <div className="text-sm font-medium text-yellow-800">
+                Total Cost: {formatCredits(getTotalCost())} credits
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={applyPreview}
+                disabled={isApplying || !user || user.credits < getTotalCost()}
+                className="bg-green-600 hover:bg-green-700 text-white"
+                size="sm"
+              >
+                {isApplying ? 'Applying...' : 'Apply Changes'}
+              </Button>
+              <Button
+                onClick={clearPreview}
+                disabled={isApplying}
+                variant="outline"
+                size="sm"
+              >
+                Clear Preview
+              </Button>
+            </div>
+            {user && user.credits < getTotalCost() && (
+              <p className="text-xs text-red-600 mt-2">
+                Insufficient credits! You need {formatCredits(getTotalCost() - user.credits)} more credits.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="mb-4" style={{ minHeight: 96 }} />
+        )
+      ) : null}
+
       {/* Canvas Container with Scrolling */}
       <div className="space-y-2">
         {/* Zoom Controls */}
@@ -807,6 +884,8 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
               className={readonly ? 'cursor-default' : 'cursor-pointer'}
               onClick={handleCanvasClick}
               onContextMenu={handleCanvasRightClick}
+              onMouseDown={handleCanvasMouseDown}
+              onMouseUp={handleCanvasMouseUp}
               onMouseMove={handleCanvasMouseMove}
               onMouseLeave={handleCanvasMouseLeave}
               style={{ imageRendering: 'pixelated', display: 'block' }}
@@ -814,46 +893,6 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
           </div>
         </div>
       </div>
-
-      {/* Preview Controls */}
-      {!readonly && previewPixels.size > 0 && (
-        <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-yellow-800">
-              Preview ({previewPixels.size} pixel{previewPixels.size !== 1 ? 's' : ''})
-            </h3>
-            <div className="text-sm font-medium text-yellow-800">
-              Total Cost: {formatCredits(getTotalCost())} credits
-            </div>
-          </div>
-          
-          <div className="flex gap-2">
-            <Button
-              onClick={applyPreview}
-              disabled={isApplying || !user || user.credits < getTotalCost()}
-              className="bg-green-600 hover:bg-green-700 text-white"
-              size="sm"
-            >
-              {isApplying ? 'Applying...' : 'Apply Changes'}
-            </Button>
-            
-            <Button
-              onClick={clearPreview}
-              disabled={isApplying}
-              variant="outline"
-              size="sm"
-            >
-              Clear Preview
-            </Button>
-          </div>
-          
-          {user && user.credits < getTotalCost() && (
-            <p className="text-xs text-red-600 mt-2">
-              Insufficient credits! You need {formatCredits(getTotalCost() - user.credits)} more credits.
-            </p>
-          )}
-        </div>
-      )}
 
       {/* Instructions */}
       {!readonly && user && (

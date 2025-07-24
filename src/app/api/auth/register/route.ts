@@ -14,13 +14,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { walletAddress, password } = registerSchema.parse(body)
 
-    // Validate Dogecoin wallet address
-    if (!isValidDogeAddress(walletAddress)) {
-      return NextResponse.json({
-        success: false,
-        error: 'Invalid Dogecoin wallet address'
-      }, { status: 400 })
-    }
+    // Remove Dogecoin wallet address validation
+    // if (!isValidDogeAddress(walletAddress)) {
+    //   return NextResponse.json({
+    //     success: false,
+    //     error: 'Invalid Dogecoin wallet address'
+    //   }, { status: 400 })
+    // }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -41,16 +41,8 @@ export async function POST(request: NextRequest) {
     const adminAddresses = process.env.ADMIN_WALLET_ADDRESSES?.split(',').map(addr => addr.trim()) || []
     const isAdmin = adminAddresses.includes(walletAddress)
 
-    // Fetch starting credits from Settings table
+    // Fallback: just use default starting credits if settings model is not available
     let startingCredits = 1000;
-    try {
-      const settings = await prisma.settings.findUnique({ where: { key: 'startingCredits' } });
-      if (settings && !isNaN(Number(settings.value))) {
-        startingCredits = Number(settings.value);
-      }
-    } catch (e) {
-      // fallback to 1000
-    }
     const user = await prisma.user.create({
       data: {
         walletAddress,

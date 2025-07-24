@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,67 +8,61 @@ datasource db {
 }
 
 model User {
-  id              String   @id @default(cuid())
-  walletAddress   String   @unique
-  passwordHash    String
-  credits         Int      @default(0)
-  isAdmin         Boolean  @default(false)
-  isTrusted       Boolean  @default(false)
-  trustedAt       DateTime? // When user became trusted
-  trustedBy       String?  // Admin who approved them
-  lastReportedAt  DateTime? // Last time user's content was reported
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  // Relations
-  pixelHistory    PixelHistory[]
-  reports         Report[]
-  transactions    Transaction[]
-  changedPixels   Pixel[]  @relation("PixelLastChangedBy")
+  id                String             @id @default(cuid())
+  walletAddress     String             @unique
+  passwordHash      String
+  credits           Int                @default(0)
+  isAdmin           Boolean            @default(false)
+  isTrusted         Boolean            @default(false)
+  trustedAt         DateTime?
+  trustedBy         String?
+  lastReportedAt    DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   moderationActions ModerationAction[] @relation("ModeratorActions")
   moderationTargets ModerationAction[] @relation("ModerationTargets")
-  trustedByUser   User?    @relation("TrustedApproval", fields: [trustedBy], references: [id])
-  approvedUsers   User[]   @relation("TrustedApproval")
+  pixelHistory      PixelHistory[]
+  changedPixels     Pixel[]            @relation("PixelLastChangedBy")
+  reports           Report[]
+  transactions      Transaction[]
+  trustedByUser     User?              @relation("TrustedApproval", fields: [trustedBy], references: [id])
+  approvedUsers     User[]             @relation("TrustedApproval")
 
   @@map("users")
 }
 
 model Board {
-  id              String   @id @default(cuid())
-  name            String
-  width           Int
-  height          Int
-  startingPixelPrice Int   @default(100) // in credits
-  priceMultiplier Float   @default(1.2)
-  isActive        Boolean  @default(true)
-  isFrozen        Boolean  @default(false)
-  endDate         DateTime? // Optional end date for time-limited boards
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  // Relations
-  pixels          Pixel[]
-  pixelHistory    PixelHistory[]
+  id                 String         @id @default(cuid())
+  name               String
+  width              Int
+  height             Int
+  startingPixelPrice Int            @default(100)
+  priceMultiplier    Float          @default(1.2)
+  isActive           Boolean        @default(true)
+  isFrozen           Boolean        @default(false)
+  endDate            DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  pixelHistory       PixelHistory[]
+  pixels             Pixel[]
 
   @@map("boards")
 }
 
 model Pixel {
-  id              String   @id @default(cuid())
+  id              String         @id @default(cuid())
   x               Int
   y               Int
-  color           String   // hex color
-  currentPrice    Int      // current price in credits
-  timesChanged    Int      @default(0)
-  isHidden        Boolean  @default(false)
-  lastChangedAt   DateTime @default(now())
-
-  // Relations
+  color           String
+  currentPrice    Int
+  timesChanged    Int            @default(0)
+  isHidden        Boolean        @default(false)
+  lastChangedAt   DateTime       @default(now())
   boardId         String
-  board           Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
   lastChangedById String?
-  lastChangedBy   User?    @relation("PixelLastChangedBy", fields: [lastChangedById], references: [id])
   pixelHistory    PixelHistory[]
+  board           Board          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  lastChangedBy   User?          @relation("PixelLastChangedBy", fields: [lastChangedById], references: [id])
   reports         Report[]
 
   @@unique([boardId, x, y])
@@ -79,79 +70,69 @@ model Pixel {
 }
 
 model PixelHistory {
-  id              String   @id @default(cuid())
-  x               Int
-  y               Int
-  color           String
-  pricePaid       Int
-  timestamp       DateTime @default(now())
-
-  // Relations
-  boardId         String
-  board           Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
-  pixelId         String
-  pixel           Pixel    @relation(fields: [pixelId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  x         Int
+  y         Int
+  color     String
+  pricePaid Int
+  timestamp DateTime @default(now())
+  boardId   String
+  userId    String
+  pixelId   String
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  pixel     Pixel    @relation(fields: [pixelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
 
   @@map("pixel_history")
 }
 
 model Transaction {
-  id              String   @id @default(cuid())
-  type            TransactionType
-  amount          Int      // in credits
-  dogeAmount      Float?   // in DOGE (for purchases)
-  txHash          String?  // blockchain transaction hash
-  status          TransactionStatus @default(PENDING)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  // Relations
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
+  id         String            @id @default(cuid())
+  type       TransactionType
+  amount     Int
+  dogeAmount Float?
+  txHash     String?
+  status     TransactionStatus @default(PENDING)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  userId     String
+  user       User              @relation(fields: [userId], references: [id])
 
   @@map("transactions")
 }
 
 model Report {
-  id              String   @id @default(cuid())
-  reason          String
-  status          ReportStatus @default(PENDING)
-  reviewedAt      DateTime?
-  reviewedBy      String?
-  moderatorNotes  String?
-  createdAt       DateTime @default(now())
+  id             String       @id @default(cuid())
+  reason         String
+  status         ReportStatus @default(PENDING)
+  reviewedAt     DateTime?
+  reviewedBy     String?
+  moderatorNotes String?
+  createdAt      DateTime     @default(now())
+  pixelId        String
+  reporterId     String
+  pixel          Pixel        @relation(fields: [pixelId], references: [id], onDelete: Cascade)
+  reporter       User         @relation(fields: [reporterId], references: [id])
 
-  // Relations
-  pixelId         String
-  pixel           Pixel    @relation(fields: [pixelId], references: [id], onDelete: Cascade)
-  reporterId      String
-  reporter        User     @relation(fields: [reporterId], references: [id])
-
-  @@unique([pixelId, reporterId]) // One report per user per pixel
+  @@unique([pixelId, reporterId])
   @@map("reports")
 }
 
 model ModerationAction {
-  id              String   @id @default(cuid())
-  actionType      ModerationActionType
-  reason          String
-  createdAt       DateTime @default(now())
-  
-  // Canvas reset specific data
-  boardId         String?
-  fromX           Int?
-  fromY           Int?
-  toX             Int?
-  toY             Int?
-  affectedPixels  Int?     // Count of pixels affected
-
-  // Relations
-  moderatorId     String
-  moderator       User     @relation("ModeratorActions", fields: [moderatorId], references: [id])
-  targetUserId    String?  // User being moderated (if applicable)
-  targetUser      User?    @relation("ModerationTargets", fields: [targetUserId], references: [id])
+  id             String               @id @default(cuid())
+  actionType     ModerationActionType
+  reason         String
+  createdAt      DateTime             @default(now())
+  boardId        String?
+  fromX          Int?
+  fromY          Int?
+  toX            Int?
+  toY            Int?
+  affectedPixels Int?
+  moderatorId    String
+  targetUserId   String?
+  moderator      User                 @relation("ModeratorActions", fields: [moderatorId], references: [id])
+  targetUser     User?                @relation("ModerationTargets", fields: [targetUserId], references: [id])
 
   @@map("moderation_actions")
 }
@@ -192,5 +173,3 @@ enum ModerationActionType {
   HIDE_PIXEL
   UNHIDE_PIXEL
 }
-
- 
