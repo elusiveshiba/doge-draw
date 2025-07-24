@@ -458,6 +458,15 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
   // Track drawing state for hold-and-draw
   const isDrawing = useRef(false)
 
+  // End drawing if mouse is released anywhere
+  useEffect(() => {
+    const handleWindowMouseUp = () => {
+      isDrawing.current = false
+    }
+    window.addEventListener('mouseup', handleWindowMouseUp)
+    return () => window.removeEventListener('mouseup', handleWindowMouseUp)
+  }, [])
+
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
     if (readonly || !user) return
     isDrawing.current = true
