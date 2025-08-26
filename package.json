@@ -2,13 +2,16 @@
   "name": "doge-draw",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "prisma db push && prisma generate && concurrently \"npm run dev:next\" \"npm run dev:ws\"",
+    "dev": "prisma db push && prisma generate && npx tsx server.js",
+    "dev:full": "./scripts/dev.sh",
     "dev:next": "next dev --turbopack -p 6832 -H 0.0.0.0",
     "dev:ws": "node server/websocket.js",
-    "build": "prisma migrate deploy && prisma generate && next build",
-    "start": "next start -p 6832",
+    "build": "prisma generate && next build",
+    "start": "node server.js",
     "start:ws": "node server/websocket.js",
+    "start:legacy": "concurrently \"next start -p 6832\" \"node server/websocket.js\"",
     "lint": "next lint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
@@ -19,6 +22,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.8.0",
+    "@socket.io/redis-adapter": "^8.2.1",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
@@ -33,6 +37,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-konva": "^18.2.10",
+    "redis": "^4.6.13",
     "socket.io": "^4.7.4",
     "socket.io-client": "^4.7.4",
     "tailwind-merge": "^2.2.0",
@@ -49,6 +54,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.4.2",
     "tailwindcss": "^4",
+    "tsx": "^4.20.5",
     "typescript": "^5"
   }
 }

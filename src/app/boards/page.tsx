@@ -15,6 +15,8 @@ export default function BoardsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [deletingBoard, setDeletingBoard] = useState<string | null>(null)
+  const [exportingBoard, setExportingBoard] = useState<string | null>(null)
 
   useEffect(() => {
     fetchBoards()
@@ -46,6 +48,80 @@ export default function BoardsPage() {
       setError('Failed to load boards')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDeleteBoard = async (boardId: string, boardName: string) => {
+    if (!window.confirm(`Are you sure you want to delete the board "${boardName}"? This action cannot be undone and will delete all pixels and history.`)) {
+      return
+    }
+
+    try {
+      setDeletingBoard(boardId)
+      const token = localStorage.getItem('auth_token')
+      const response = await fetch(`/api/boards/${boardId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        setBoards(boards => boards.filter(b => b.id !== boardId))
+      } else {
+        alert('Failed to delete board: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error deleting board:', error)
+      alert('Failed to delete board')
+    } finally {
+      setDeletingBoard(null)
+    }
+  }
+
+  const handleExportBoard = async (boardId: string, boardName: string) => {
+    try {
+      setExportingBoard(boardId)
+      const token = localStorage.getItem('auth_token')
+      const response = await fetch(`/api/admin/boards/${boardId}/export`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Export failed')
+      }
+
+      // Get the filename from Content-Disposition header or create one
+      const contentDisposition = response.headers.get('Content-Disposition')
+      let filename = `board_${boardName.replace(/[^a-zA-Z0-9]/g, '_')}_${boardId}_${new Date().toISOString().split('T')[0]}.json`
+      
+      if (contentDisposition) {
+        const matches = contentDisposition.match(/filename="([^"]+)"/)
+        if (matches) {
+          filename = matches[1]
+        }
+      }
+
+      // Create download
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+    } catch (error) {
+      console.error('Error exporting board:', error)
+      alert('Failed to export board: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    } finally {
+      setExportingBoard(null)
     }
   }
 
@@ -161,6 +237,29 @@ export default function BoardsPage() {
                     {board.isFrozen ? 'View Archive' : 'Paint'}
                   </Button>
                 </Link>
+                {user?.isAdmin && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleExportBoard(board.id, board.name)}
+                      disabled={exportingBoard === board.id}
+                      className="border-blue-300 text-blue-700 hover:bg-blue-50 px-3"
+                      title="Export board with full history"
+                    >
+                      {exportingBoard === board.id ? '📦' : '📦'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteBoard(board.id, board.name)}
+                      disabled={deletingBoard === board.id}
+                      className="border-red-300 text-red-700 hover:bg-red-50 px-3"
+                    >
+                      {deletingBoard === board.id ? '🗑️' : '🗑️'}
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </div>

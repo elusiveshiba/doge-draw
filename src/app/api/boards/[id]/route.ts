@@ -205,7 +205,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     // Delete all related data first
-    await prisma.$transaction(async (tx: any) => {
+    await prisma.$transaction(async (tx) => {
       // Delete pixel history
       await tx.pixelHistory.deleteMany({
         where: { boardId }

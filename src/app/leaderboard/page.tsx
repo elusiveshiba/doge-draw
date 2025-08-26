@@ -33,7 +33,9 @@ export default function LeaderboardPage() {
   }
 
   const formatWalletAddress = (address: string) => {
-    return `${address.slice(0, 12)}...${address.slice(-8)}`
+    return address.length > 20 
+      ? `${address.slice(0, 12)}...${address.slice(-8)}`
+      : address
   }
 
   const formatDate = (date: Date | null) => {

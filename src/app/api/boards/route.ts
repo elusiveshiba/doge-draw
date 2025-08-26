@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
       include: {
         pixels: {
           where: { isHidden: false },
-          select: { id: true } // Only fetch id for count
+          select: { x: true, y: true, color: true, isHidden: true }
         },
         _count: {
           select: { pixels: true, pixelHistory: true }

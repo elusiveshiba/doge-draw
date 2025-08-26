@@ -1,224 +1,329 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { jwtVerify } from 'jose'
 import { z } from 'zod'
-import { io } from 'socket.io-client'
-import { prisma } from '@/lib/prisma'
-import { isValidHexColor, calculateNewPixelPrice } from '@/lib/utils'
+import { prisma, dbUtils } from '@/lib/prisma'
+import { AuthService, AuthError } from '@/lib/auth'
+import { schemas, isValidHexColorEnhanced, validateBoardDimensions } from '@/lib/validation'
+import { rateLimiters } from '@/lib/rateLimit'
+import { webSocketService } from '@/lib/websocketService'
+import { logger } from '@/lib/logger'
+import { calculateNewPixelPrice } from '@/lib/utils'
 
 const paintPixelSchema = z.object({
-  boardId: z.string().cuid(),
-  x: z.number().int().min(0),
-  y: z.number().int().min(0),
-  color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid hex color')
+  boardId: schemas.boardId,
+  x: z.number().int().min(0).max(2000),
+  y: z.number().int().min(0).max(2000),
+  color: schemas.hexColor
 })
 
-const secret = new TextEncoder().encode(process.env.NEXTAUTH_SECRET || 'fallback-secret')
-
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  
   try {
-    // Verify authentication
-    const authHeader = request.headers.get('authorization')
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // Authenticate user
+    const payload = await AuthService.authenticateRequest(request);
+    const userId = payload.userId;
+
+    // Apply rate limiting
+    const rateLimitResult = await rateLimiters.pixelPaint.checkLimit(userId, 'paint');
+    if (!rateLimitResult.allowed) {
+      logger.warn('Pixel paint rate limit exceeded', { 
+        userId, 
+        remaining: rateLimitResult.remaining 
+      });
+      
       return NextResponse.json({
         success: false,
-        error: 'Authentication required'
-      }, { status: 401 })
+        error: 'Rate limit exceeded. Please slow down your painting.',
+        retryAfter: rateLimitResult.retryAfter
+      }, { 
+        status: 429,
+        headers: {
+          'Retry-After': String(rateLimitResult.retryAfter || 60),
+          'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+        }
+      });
     }
 
-    const token = authHeader.substring(7)
-    const { payload } = await jwtVerify(token, secret)
-    const userId = payload.userId as string
+    // Parse and validate request body
+    const body = await request.json();
+    const { boardId, x, y, color } = paintPixelSchema.parse(body);
 
-    // Parse request body
-    const body = await request.json()
-    const { boardId, x, y, color } = paintPixelSchema.parse(body)
-
-    // Validate color
-    if (!isValidHexColor(color)) {
+    // Additional color validation
+    if (!isValidHexColorEnhanced(color)) {
       return NextResponse.json({
         success: false,
         error: 'Invalid color format'
-      }, { status: 400 })
+      }, { status: 400 });
     }
 
-    // Get board and validate coordinates
-    const board = await prisma.board.findUnique({
-      where: { id: boardId }
-    })
+    logger.info('Pixel paint attempt', { userId, boardId, x, y, color });
 
-    if (!board) {
-      return NextResponse.json({
-        success: false,
-        error: 'Board not found'
-      }, { status: 404 })
-    }
+    // Use retry logic for database operations
+    const result = await dbUtils.withRetry(async () => {
+      return await prisma.$transaction(async (tx) => {
+        // Get board and validate
+        const board = await tx.board.findUnique({
+          where: { id: boardId },
+          select: {
+            id: true,
+            width: true,
+            height: true,
+            startingPixelPrice: true,
+            priceMultiplier: true,
+            isActive: true,
+            isFrozen: true,
+            endDate: true
+          }
+        });
 
-    if (!board.isActive || board.isFrozen) {
-      return NextResponse.json({
-        success: false,
-        error: 'Board is not available for painting'
-      }, { status: 400 })
-    }
-
-    if (x < 0 || x >= board.width || y < 0 || y >= board.height) {
-      return NextResponse.json({
-        success: false,
-        error: 'Coordinates out of bounds'
-      }, { status: 400 })
-    }
-
-    // Get user
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
-    })
-
-    if (!user) {
-      return NextResponse.json({
-        success: false,
-        error: 'User not found'
-      }, { status: 404 })
-    }
-
-    // Get or create pixel
-    let pixel = await prisma.pixel.findUnique({
-      where: {
-        boardId_x_y: {
-          boardId,
-          x,
-          y
+        if (!board) {
+          throw new Error('Board not found');
         }
-      }
-    })
 
-    const currentPrice = pixel?.currentPrice || board.startingPixelPrice
+        if (!board.isActive || board.isFrozen) {
+          throw new Error('Board is not available for painting');
+        }
 
-    // Check if user has enough credits
-    if (user.credits < currentPrice) {
-      return NextResponse.json({
-        success: false,
-        error: `Insufficient credits. Need ${currentPrice} credits.`
-      }, { status: 400 })
-    }
+        // Check if board has ended
+        if (board.endDate && new Date() > board.endDate) {
+          throw new Error('Board has ended');
+        }
 
-    // Calculate new price
-    const newPrice = calculateNewPixelPrice(currentPrice, board.priceMultiplier)
+        // Validate coordinates
+        if (!validateBoardDimensions(board.width, board.height) || 
+            x < 0 || x >= board.width || y < 0 || y >= board.height) {
+          throw new Error('Coordinates out of bounds');
+        }
 
-    // Perform transaction
-    const result = await prisma.$transaction(async (tx: any) => {
-      // Update or create pixel
-      const updatedPixel = await tx.pixel.upsert({
-        where: {
-          boardId_x_y: {
+        // Get user with credits
+        const user = await tx.user.findUnique({
+          where: { id: userId },
+          select: { 
+            id: true, 
+            credits: true, 
+            walletAddress: true 
+          }
+        });
+
+        if (!user) {
+          throw new Error('User not found');
+        }
+
+        // Get existing pixel
+        const existingPixel = await tx.pixel.findUnique({
+          where: {
+            boardId_x_y: { boardId, x, y }
+          },
+          select: {
+            id: true,
+            currentPrice: true,
+            color: true,
+            timesChanged: true
+          }
+        });
+
+        const currentPrice = existingPixel?.currentPrice || board.startingPixelPrice;
+
+        // Check if user has enough credits
+        if (user.credits < currentPrice) {
+          throw new Error(`Insufficient credits. Need ${currentPrice} credits, have ${user.credits}.`);
+        }
+
+        // Skip if same color (optimization)
+        if (existingPixel?.color === color) {
+          logger.debug('Skipping paint - same color', { userId, boardId, x, y, color });
+          return {
+            pixel: existingPixel,
+            newUserCredits: user.credits,
+            pricePaid: 0,
+            newPrice: currentPrice,
+            skipped: true
+          };
+        }
+
+        // Calculate new price
+        const newPrice = calculateNewPixelPrice(currentPrice, board.priceMultiplier);
+
+        // Update or create pixel
+        const updatedPixel = await tx.pixel.upsert({
+          where: {
+            boardId_x_y: { boardId, x, y }
+          },
+          update: {
+            color,
+            currentPrice: newPrice,
+            timesChanged: { increment: 1 },
+            lastChangedAt: new Date(),
+            lastChangedById: userId,
+            isHidden: false
+          },
+          create: {
             boardId,
             x,
-            y
+            y,
+            color,
+            currentPrice: newPrice,
+            timesChanged: 1,
+            lastChangedAt: new Date(),
+            lastChangedById: userId,
+            isHidden: false
+          },
+          select: {
+            id: true,
+            x: true,
+            y: true,
+            color: true,
+            currentPrice: true,
+            timesChanged: true,
+            lastChangedAt: true
           }
-        },
-        update: {
-          color,
-          currentPrice: newPrice,
-          timesChanged: { increment: 1 },
-          lastChangedAt: new Date(),
-          lastChangedById: userId,
-          isHidden: false // Reset hidden status when painted
-        },
-        create: {
-          boardId,
-          x,
-          y,
-          color,
-          currentPrice: newPrice,
-          timesChanged: 1,
-          lastChangedAt: new Date(),
-          lastChangedById: userId
-        }
-      })
+        });
 
-      // Deduct credits from user
-      await tx.user.update({
-        where: { id: userId },
-        data: {
-          credits: { decrement: currentPrice }
-        }
-      })
+        // Deduct credits from user
+        await tx.user.update({
+          where: { id: userId },
+          data: { credits: { decrement: currentPrice } }
+        });
 
-      // Record transaction
-      await tx.transaction.create({
-        data: {
-          userId,
-          type: 'PIXEL_PAINT',
-          amount: -currentPrice,
-          status: 'COMPLETED'
-        }
-      })
+        // Record transaction
+        await tx.transaction.create({
+          data: {
+            userId,
+            type: 'PIXEL_PAINT',
+            amount: -currentPrice,
+            status: 'COMPLETED'
+          }
+        });
 
-      // Record pixel history
-      await tx.pixelHistory.create({
-        data: {
-          boardId,
-          x,
-          y,
-          color,
+        // Record pixel history
+        await tx.pixelHistory.create({
+          data: {
+            boardId,
+            x,
+            y,
+            color,
+            pricePaid: currentPrice,
+            userId,
+            pixelId: updatedPixel.id
+          }
+        });
+
+        return {
+          pixel: updatedPixel,
+          newUserCredits: user.credits - currentPrice,
           pricePaid: currentPrice,
-          userId,
-          pixelId: updatedPixel.id
-        }
-      })
+          newPrice
+        };
+      });
+    }, 3, 500); // 3 retries with 500ms base delay
 
-      return updatedPixel
-    })
+    // Broadcast updates via WebSocket (non-blocking)
+    if (!result.skipped) {
+      try {
+        logger.info('Broadcasting pixel update via WebSocket', { boardId, x, y, color, newPrice: result.newPrice, userId });
+        
+        await webSocketService.broadcastPixelUpdate({
+          boardId,
+          x,
+          y,
+          color,
+          newPrice: result.newPrice,
+          userId
+        });
 
-    // Broadcast pixel update via WebSocket
-    try {
-      const wsUrl = process.env.WEBSOCKET_URL || 'http://localhost:3001'
-      const wsClient = io(wsUrl, { transports: ['websocket', 'polling'] })
-      wsClient.on('connect', () => {
-      wsClient.emit('pixel-painted', {
-        boardId,
-        x,
-        y,
-        color,
-        newPrice,
-        userId
-        }, () => {
-          wsClient.disconnect()
-        })
-      })
-      wsClient.on('connect_error', () => {
-        wsClient.disconnect()
-      })
-      setTimeout(() => {
-        if (wsClient.connected) {
-      wsClient.disconnect()
-        }
-      }, 2000)
-    } catch (wsError) {
-      // Don't fail the request if WebSocket fails
+        // Also broadcast credits update
+        await webSocketService.broadcastCreditsUpdate(userId, result.newUserCredits);
+        
+        logger.info('WebSocket broadcasts completed successfully');
+      } catch (wsError) {
+        logger.error('WebSocket broadcast failed', { wsError, userId, boardId, x, y });
+      }
     }
+
+    const duration = Date.now() - startTime;
+    
+    logger.info('Pixel painted successfully', { 
+      userId, 
+      boardId, 
+      x, 
+      y, 
+      pricePaid: result.pricePaid,
+      newPrice: result.newPrice,
+      newCredits: result.newUserCredits,
+      duration,
+      skipped: result.skipped || false
+    });
 
     return NextResponse.json({
       success: true,
       data: {
-        pixel: result,
-        newUserCredits: user.credits - currentPrice,
-        pricePaid: currentPrice,
-        newPrice
+        pixel: result.pixel,
+        newUserCredits: result.newUserCredits,
+        pricePaid: result.pricePaid,
+        newPrice: result.newPrice
       }
-    })
+    });
 
   } catch (error) {
+    const duration = Date.now() - startTime;
+    
     if (error instanceof z.ZodError) {
+      logger.warn('Pixel paint validation error', { 
+        error: error.errors[0].message,
+        duration 
+      });
+      
       return NextResponse.json({
         success: false,
         error: error.errors[0].message
-      }, { status: 400 })
+      }, { status: 400 });
     }
 
-    console.error('Paint pixel error:', error)
+    if (error instanceof AuthError) {
+      logger.warn('Pixel paint auth error', { 
+        error: error.message,
+        code: error.code,
+        duration 
+      });
+      
+      return NextResponse.json({
+        success: false,
+        error: 'Authentication failed'
+      }, { status: 401 });
+    }
+
+    // Handle known business logic errors
+    if (error instanceof Error) {
+      const knownErrors = [
+        'Board not found',
+        'Board is not available for painting',
+        'Board has ended',
+        'Coordinates out of bounds',
+        'User not found',
+        'Insufficient credits'
+      ];
+      
+      if (knownErrors.some(msg => error.message.includes(msg))) {
+        logger.warn('Pixel paint business logic error', { 
+          error: error.message,
+          duration 
+        });
+        
+        return NextResponse.json({
+          success: false,
+          error: error.message
+        }, { status: 400 });
+      }
+    }
+
+    logger.error('Pixel paint internal error', { 
+      error: error instanceof Error ? error.message : 'Unknown error',
+      duration 
+    });
+    
     return NextResponse.json({
       success: false,
       error: 'Internal server error'
-    }, { status: 500 })
+    }, { status: 500 });
   }
 } 

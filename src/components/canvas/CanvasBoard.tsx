@@ -348,8 +348,16 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
     let wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL
     if (!wsUrl) {
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      wsUrl = `${protocol}://${window.location.host}`
+      // In development, if we're running on a different port than the WebSocket server,
+      // we need to connect to the WebSocket server port
+      if (process.env.NODE_ENV === 'development' && window.location.port !== '6832') {
+        wsUrl = `${protocol}://${window.location.hostname}:6832`
+      } else {
+        wsUrl = `${protocol}://${window.location.host}`
+      }
     }
+    console.log('WebSocket connecting to:', wsUrl)
+    console.log('NEXT_PUBLIC_WEBSOCKET_URL from env:', process.env.NEXT_PUBLIC_WEBSOCKET_URL)
     const newSocket = io(wsUrl)
 
     console.log('Client board.id:', board.id, 'type:', typeof board.id)
@@ -357,11 +365,19 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
     newSocket.on('connect', () => {
       console.log('Connected to WebSocket')
       setIsConnected(true)
-      newSocket.emit('join-board', board.id)
+      newSocket.emit('join-board', {
+        boardId: board.id,
+        userId: user?.id
+      })
     })
 
     newSocket.on('disconnect', () => {
       console.log('Disconnected from WebSocket')
+      setIsConnected(false)
+    })
+
+    newSocket.on('error', (error) => {
+      console.error('WebSocket error:', error)
       setIsConnected(false)
     })
 
@@ -396,7 +412,7 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
     return () => {
       newSocket.disconnect()
     }
-  }, [board.id])
+  }, [board.id, user?.id])
 
   // Keyboard shortcuts for zoom
   useEffect(() => {

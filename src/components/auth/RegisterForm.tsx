@@ -83,6 +83,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
               onChange={(e) => setWalletAddress(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
               placeholder="Enter your Dogecoin address or username"
+              autoCapitalize="none"
               disabled={isLoading}
             />
             <p className="text-xs text-gray-500 mt-1">

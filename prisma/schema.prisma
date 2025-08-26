@@ -28,6 +28,7 @@ model User {
   trustedByUser     User?              @relation("TrustedApproval", fields: [trustedBy], references: [id])
   approvedUsers     User[]             @relation("TrustedApproval")
 
+  @@index([walletAddress])
   @@map("users")
 }
 
@@ -46,6 +47,7 @@ model Board {
   pixelHistory       PixelHistory[]
   pixels             Pixel[]
 
+  @@index([isActive, isFrozen])
   @@map("boards")
 }
 
@@ -66,6 +68,8 @@ model Pixel {
   reports         Report[]
 
   @@unique([boardId, x, y])
+  @@index([boardId, x, y])
+  @@index([boardId, isHidden])
   @@map("pixels")
 }
 
@@ -83,6 +87,8 @@ model PixelHistory {
   pixel     Pixel    @relation(fields: [pixelId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id])
 
+  @@index([boardId, timestamp(sort: Desc)])
+  @@index([userId, timestamp(sort: Desc)])
   @@map("pixel_history")
 }
 
@@ -115,6 +121,7 @@ model Report {
   reporter       User         @relation(fields: [reporterId], references: [id])
 
   @@unique([pixelId, reporterId])
+  @@index([status, createdAt(sort: Desc)])
   @@map("reports")
 }
 

@@ -14,6 +14,7 @@ export function BoardAdminControls({ board, onBoardUpdate }: BoardAdminControlsP
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [editData, setEditData] = useState({
     name: board.name,
     width: board.width,
@@ -86,13 +87,58 @@ export function BoardAdminControls({ board, onBoardUpdate }: BoardAdminControlsP
     }
   }
 
+  const handleExport = async () => {
+    try {
+      setIsExporting(true)
+      const token = localStorage.getItem('auth_token')
+      const response = await fetch(`/api/admin/boards/${board.id}/export`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Export failed')
+      }
+
+      // Get the filename from Content-Disposition header or create one
+      const contentDisposition = response.headers.get('Content-Disposition')
+      let filename = `board_${board.name.replace(/[^a-zA-Z0-9]/g, '_')}_${board.id}_${new Date().toISOString().split('T')[0]}.json`
+      
+      if (contentDisposition) {
+        const matches = contentDisposition.match(/filename="([^"]+)"/)
+        if (matches) {
+          filename = matches[1]
+        }
+      }
+
+      // Create download
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+    } catch (error) {
+      console.error('Error exporting board:', error)
+      alert('Failed to export board: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   if (!isEditing) {
     return (
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-medium text-yellow-800">Admin Controls</h3>
-            <p className="text-yellow-700 text-sm">Manage this board's settings and status</p>
+            <p className="text-yellow-700 text-sm">Manage this board&apos;s settings and status</p>
           </div>
           <div className="flex space-x-2">
             <Button
@@ -102,6 +148,15 @@ export function BoardAdminControls({ board, onBoardUpdate }: BoardAdminControlsP
               className="border-yellow-300 text-yellow-700 hover:bg-yellow-100"
             >
               ✏️ Edit Board
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={isExporting}
+              className="border-blue-300 text-blue-700 hover:bg-blue-100"
+            >
+              {isExporting ? '📦 Exporting...' : '📦 Export Board'}
             </Button>
             <Button
               variant="outline"

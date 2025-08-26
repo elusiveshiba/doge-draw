@@ -117,7 +117,9 @@ export function Header() {
                       onMouseLeave={() => setShowTooltip(false)}
                       title="Click to copy full address"
                     >
-                      {user.walletAddress.slice(0, 8)}...{user.walletAddress.slice(-6)}
+                      {user.walletAddress.length > 20 
+                        ? `${user.walletAddress.slice(0, 8)}...${user.walletAddress.slice(-6)}`
+                        : user.walletAddress}
                     </button>
                     
                     {/* Tooltip */}
