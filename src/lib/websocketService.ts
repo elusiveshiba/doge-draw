@@ -42,6 +42,39 @@ class WebSocketService {
   }
 
   /**
+   * Broadcast multiple pixel updates efficiently
+   */
+  async broadcastPixelBatch(pixels: PixelUpdateData[]): Promise<void> {
+    try {
+      logger.info('WebSocket service: Starting pixel batch broadcast', { pixelCount: pixels.length });
+      
+      // Use the batch method - the proxy should handle method availability
+      await wsManager.broadcastPixelBatch(pixels);
+      logger.info('WebSocket service: Pixel batch broadcasted successfully', { 
+        pixelCount: pixels.length 
+      });
+    } catch (error) {
+      logger.error('WebSocket service: Failed to broadcast pixel batch', { 
+        error: error instanceof Error ? error.message : error,
+        errorStack: error instanceof Error ? error.stack : undefined,
+        pixelCount: pixels.length 
+      });
+      
+      // Fallback: broadcast pixels individually with small delays to allow server-side batching
+      logger.info('WebSocket service: Falling back to individual pixel broadcasts', { pixelCount: pixels.length });
+      for (let i = 0; i < pixels.length; i++) {
+        const pixel = pixels[i];
+        await this.broadcastPixelUpdate(pixel);
+        
+        // Small delay to allow server-side batching to collect them
+        if (i < pixels.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
+      }
+    }
+  }
+
+  /**
    * Broadcast pixel hidden event
    */
   async broadcastPixelHidden(boardId: string, x: number, y: number): Promise<void> {

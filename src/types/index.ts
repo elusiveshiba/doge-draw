@@ -75,7 +75,52 @@ export interface BoardStateMessage {
   }
 }
 
-export type WebSocketMessage = PixelUpdateMessage | UserCreditsMessage | BoardStateMessage
+export interface PixelBatchUpdateMessage {
+  type: 'PIXEL_BATCH_UPDATE'
+  payload: {
+    boardId: string
+    updates: Array<{
+      x: number
+      y: number
+      color: string
+      newPrice: number
+      userId: string
+    }>
+  }
+}
+
+export interface PixelUpdatesMessage {
+  type: 'PIXEL_UPDATES'
+  payload: {
+    boardId: string
+    updates: Array<{
+      x: number
+      y: number
+      color: string
+      price: number
+      timesChanged: number
+    }>
+    syncTimestamp?: number
+  }
+}
+
+export interface BoardRefreshMessage {
+  type: 'BOARD_REFRESH'
+  payload: {
+    boardId: string
+    pixels: PixelData[]
+    reason: string
+    syncTimestamp?: number
+  }
+}
+
+export type WebSocketMessage = 
+  | PixelUpdateMessage 
+  | UserCreditsMessage 
+  | BoardStateMessage 
+  | PixelBatchUpdateMessage
+  | PixelUpdatesMessage
+  | BoardRefreshMessage
 
 // API Response types
 export interface ApiResponse<T = any> {

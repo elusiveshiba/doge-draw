@@ -177,6 +177,52 @@ export class BoardCache {
     }
   }
 
+  // Get recent pixel updates since a timestamp (for mobile reconnection)
+  static async getRecentPixelUpdates(boardId: string, sinceTimestamp: number): Promise<Array<{
+    x: number;
+    y: number;
+    color: string;
+    price: number;
+    timesChanged: number;
+    updatedAt: number;
+  }> | null> {
+    try {
+      // Get pixels that were updated after the given timestamp
+      const recentPixels = await prisma.pixel.findMany({
+        where: {
+          boardId,
+          isHidden: false,
+          lastChangedAt: {
+            gt: new Date(sinceTimestamp)
+          }
+        },
+        select: {
+          x: true,
+          y: true,
+          color: true,
+          currentPrice: true,
+          timesChanged: true,
+          lastChangedAt: true
+        },
+        orderBy: {
+          lastChangedAt: 'asc' // Oldest changes first
+        }
+      });
+
+      return recentPixels.map(pixel => ({
+        x: pixel.x,
+        y: pixel.y,
+        color: pixel.color,
+        price: pixel.currentPrice,
+        timesChanged: pixel.timesChanged,
+        updatedAt: pixel.lastChangedAt.getTime()
+      }));
+    } catch (error) {
+      logger.error('Error fetching recent pixel updates', { error, boardId, sinceTimestamp });
+      return null;
+    }
+  }
+
   // Get board state for viewport (optimized for large boards)
   static async getViewportBoardState(
     boardId: string, 

@@ -82,6 +82,10 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isCanvasReady, setIsCanvasReady] = useState(false)
+  
+  // Client-side pixel batching system
+  const pixelUpdateBufferRef = useRef<Map<string, PixelData>>(new Map())
+  const animationFrameRef = useRef<number | null>(null)
   const [previewPixels, setPreviewPixels] = useState<Map<string, PreviewPixel>>(new Map())
   const [isApplying, setIsApplying] = useState(false)
   const [customColors, setCustomColors] = useState<string[]>([])
@@ -89,6 +93,48 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
   const [pickerColor, setPickerColor] = useState('#FF0000')
   const [zoomIndex, setZoomIndex] = useState(getDefaultZoomIndex(board.width, board.height))
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  
+  // Flush pixel buffer and update state efficiently
+  const flushPixelBuffer = useCallback(() => {
+    const buffer = pixelUpdateBufferRef.current
+    if (buffer.size === 0) return
+    
+    // Batch update state with all buffered pixels
+    setPixels(prev => {
+      const newPixels = new Map(prev)
+      for (const [key, pixel] of buffer) {
+        newPixels.set(key, pixel)
+      }
+      return newPixels
+    })
+    
+    // Clear buffer
+    buffer.clear()
+    animationFrameRef.current = null
+  }, [])
+  
+  // Add pixel to buffer and schedule flush
+  const addPixelToBuffer = useCallback((pixel: PixelData) => {
+    const key = getPixelKey(pixel.x, pixel.y)
+    pixelUpdateBufferRef.current.set(key, pixel)
+    
+    // Schedule flush if not already scheduled
+    if (animationFrameRef.current === null) {
+      animationFrameRef.current = requestAnimationFrame(flushPixelBuffer)
+    }
+  }, [flushPixelBuffer])
+  
+  // Process batch pixel updates
+  const processBatchPixelUpdate = useCallback((updates: any[]) => {
+    updates.forEach(update => {
+      const { x, y, color, newPrice } = update
+      addPixelToBuffer({
+        x, y, color,
+        price: newPrice,
+        timesChanged: (pixels.get(getPixelKey(x, y))?.timesChanged || 0) + 1
+      })
+    })
+  }, [addPixelToBuffer, pixels])
   
   // Moderation state
   const [showReportModal, setShowReportModal] = useState(false)
@@ -388,17 +434,26 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
         console.log('Comparing event boardId:', boardId, 'type:', typeof boardId, 'with client board.id:', board.id, 'type:', typeof board.id)
         if (String(boardId) !== String(board.id)) return; // Ignore updates for other boards
         console.log('Received pixel update for this board:', { x, y, color, newPrice });
-        setPixels(prev => {
-          const newPixels = new Map(prev);
-          const pixelKey = getPixelKey(x, y);
-          newPixels.set(pixelKey, {
-            x, y, color,
-            price: newPrice,
-            timesChanged: (prev.get(pixelKey)?.timesChanged || 0) + 1
-          });
-          console.log('Updated pixels state for', pixelKey);
-          return newPixels;
+        
+        // Use buffered update instead of immediate state update
+        addPixelToBuffer({
+          x, y, color,
+          price: newPrice,
+          timesChanged: (pixels.get(getPixelKey(x, y))?.timesChanged || 0) + 1
         });
+      }
+    });
+
+    // Handle batch pixel updates
+    newSocket.on('pixel-batch-update', (data: WebSocketMessage) => {
+      console.log('Received pixel batch update:', data)
+      if (data.type === 'PIXEL_BATCH_UPDATE') {
+        const { boardId, updates } = data.payload;
+        if (String(boardId) !== String(board.id)) return; // Ignore updates for other boards
+        console.log('Received pixel batch update for this board:', { updateCount: updates.length });
+        
+        // Process all pixels in the batch
+        processBatchPixelUpdate(updates);
       }
     });
 
@@ -411,6 +466,11 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
 
     return () => {
       newSocket.disconnect()
+      // Clean up animation frame if pending
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
     }
   }, [board.id, user?.id])
 
@@ -636,46 +696,56 @@ export function CanvasBoard({ board, className, readonly = false }: CanvasBoardP
         return
       }
 
-      // Apply each pixel in the preview
+      // Apply all pixels in batch for better performance
       const previewArray = Array.from(previewPixels.values())
       
-      for (const previewPixel of previewArray) {
-        const response = await fetch('/api/pixels/paint', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            boardId: board.id,
-            x: previewPixel.x,
-            y: previewPixel.y,
-            color: previewPixel.color
-          })
+      const response = await fetch('/api/pixels/paint-batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          boardId: board.id,
+          pixels: previewArray.map(p => ({
+            x: p.x,
+            y: p.y,
+            color: p.color
+          }))
         })
+      })
 
-        const result = await response.json()
-        
-        if (result.success) {
-          // Immediately update local state
-          const { newPrice } = result.data
+      const result = await response.json()
+      
+      if (result.success) {
+        // Update local pixels state with all painted pixels
+        if (result.data.pixels.length > 0) {
           setPixels(prev => {
             const newPixels = new Map(prev)
-            const pixelKey = getPixelKey(previewPixel.x, previewPixel.y)
-            newPixels.set(pixelKey, {
-              x: previewPixel.x,
-              y: previewPixel.y,
-              color: previewPixel.color,
-              price: newPrice,
-              timesChanged: (prev.get(pixelKey)?.timesChanged || 0) + 1
+            result.data.pixels.forEach((pixel: any) => {
+              const pixelKey = getPixelKey(pixel.x, pixel.y)
+              newPixels.set(pixelKey, {
+                x: pixel.x,
+                y: pixel.y,
+                color: pixel.color,
+                price: pixel.currentPrice,
+                timesChanged: pixel.timesChanged
+              })
             })
             return newPixels
           })
-        } else {
-          console.error('Failed to paint pixel:', result.error)
-          alert(`Failed to paint pixel at (${previewPixel.x}, ${previewPixel.y}): ${result.error}`)
-          break
         }
+
+        // Show result summary
+        const paintedCount = result.data.pixels.length
+        const skippedCount = result.data.skippedPixels?.length || 0
+        if (skippedCount > 0) {
+          console.log(`Painted ${paintedCount} pixels, skipped ${skippedCount} (same color)`)
+        }
+      } else {
+        console.error('Failed to paint pixels:', result.error)
+        alert(`Failed to paint pixels: ${result.error}`)
+        return
       }
 
       // Clear preview and refresh user credits
